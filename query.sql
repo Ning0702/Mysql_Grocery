@@ -404,7 +404,7 @@ GROUP BY client_id, name;
 
 
 -- Create the stored procedure
-
+DROP PROCEDURE IF EXISTS get_invoices_with_balance;
 DELIMITER $$
 CREATE PROCEDURE get_invoices_with_balance()
 BEGIN
