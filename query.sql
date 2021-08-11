@@ -403,7 +403,7 @@ JOIN invoices i USING(client_id)
 GROUP BY client_id, name;
 
 
--- Create the stored procedure
+-- Create the stored procedure and Call it
 DROP PROCEDURE IF EXISTS get_invoices_with_balance;
 DELIMITER $$
 CREATE PROCEDURE get_invoices_with_balance()
@@ -413,5 +413,82 @@ BEGIN
     WHERE invoice_total - payment_total > 0;
 END $$
 DELIMITER ; 
+
+DROP PROCEDURE IF EXISTS get_clients_by_state;
+DELIMITER $$
+CREATE PROCEDURE get_clients_by_state(state CHAR(2))
+BEGIN
+	SELECT * FROM clients c
+    WHERE c.state = IFNULL(state, c.state); -- If the value is null, return all the info, otherwise return the asked
+END $$
+DELIMITER ;
+CALL get_clients_by_state('NY');
+
+
+DROP PROCEDURE IF EXISTS get_invoices_by_client;
+DELIMITER $$
+CREATE PROCEDURE get_invoices_by_client( client_id CHAR(1))
+BEGIN
+	SELECT * FROM invoices i
+    WHERE i.client_id = client_id;
+END $$
+DELIMITER ;
+CALL get_invoices_by_client(3);
     
+DROP PROCEDURE IF EXISTS get_payments;
+DELIMITER $$
+CREATE PROCEDURE get_payments(client_id INT(4), payment_method_id TINYINT(1))
+BEGIN
+	SELECT * 
+    FROM payments p
+    JOIN payment_methods pm
+    ON p.payment_method = pm.payment_method_id
+    -- WHERE CASE
+	-- 		WHEN client_id IS NULL AND payment_method_id IS NULL THEN p.client_id = p.client_id
+    --      WHEN client_id IS NOT NULL AND payment_method_id IS NULL THEN p.client_id = client_id
+    --      ELSE p.client_id = client_id AND pm.payment_method_id = payment_method_id
+	--	  END;
+    WHERE p.client_id = IFNULL(client_id, p.client_id) AND
+		  pm.payment_method_id = IFNULL(payment_method_id, pm.payment_method_id);
+END $$
+DELIMITER ;
+
+
+-- Update stored procedure data
+DELIMITER $$
+CREATE PROCEDURE invoice_payment (
+	invoice_id INT,
+    payment_total DECIMAL(9, 2),
+    payment_date DATE
+)
+BEGIN
+	IF payment_total <= 0 THEN 
+		SIGNAL SQLSTATE '22003' 
+			SET MESSAGE_TEXT = 'Invalid payment amount';
+	END IF;
+	UPDATE invoice i
+    SET 
+		i.payment_total = payment_total,
+        i.payment_date = payment_date
+	WHERE i.invoice_id = invoice_id;
+END $$
+DELIMITER ;
+
+
+-- Local variable
+DELIMITER $$
+CREATE PROCEDURE get_risk_factor()
+BEGIN
+	DECLARE risk_factor DECIMAL(9, 2) DEFAULT 0;
+    DECLARE invoices_total DECIMAL(9, 2);
+    DECLARE invoices_count INT;
     
+    SELECT COUNT(*), SUM(invoice_total)
+    INTO invoices_count, invoices_total
+    FROM invoices;
+    
+    SET risk_factor = invoices_total / invoices_count * 5;
+    
+    SELECT rish_factor;
+END $$
+DELIMITER ;
