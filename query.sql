@@ -504,3 +504,63 @@ SELECT
     name,
     get_risk_factor_for_client(client_id) AS risk_factor
 FROM clients;
+
+
+-- trigger - after insert
+DELIMITER $$
+CREATE TRIGGER payment_after_insert
+	AFTER INSERT ON payments
+    FOR EACH ROW
+BEGIN
+	UPDATE invoices
+    SET payment_total = payment_total + NEW.amount -- Relevant to the new insert value
+    WHERE invoice_id = NEW.invoice_id;
+END $$
+DELIMITER ;
+
+INSERT INTO payments
+VALUES (DEFAULT, 5, 2, '2021-07-01', 10, 1);
+
+
+-- trigger - after delete for AUDIT
+DROP TRIGGER IF EXISTS payment_after_delete; 
+DELIMITER $$
+CREATE TRIGGER payment_after_delete
+	AFTER DELETE ON payments
+    FOR EACH ROW
+BEGIN
+	UPDATE invoices
+    SET payment_total = payment_total - OLD.amount
+    WHERE invoice_id = OLD.invoice_id;
+    
+    INSERT INTO payments_audit
+    VALUES (OLD.client_id, OLD.date, OLD.amount, 'DELETE', NOW());
+END $$
+DELIMITER ;
+
+DELETE FROM payments
+WHERE payment_id = 11;
+
+
+-- Check all the triggers
+SHOW TRIGGERS LIKE 'payments%';
+
+
+-- Find the event
+SHOW VARIABLES LIKE 'event%';
+SET GLOBAL event_scheduler = ON; -- OFF
+
+-- Set an event
+DROP EVENT IF EXISTS yearly_delete_stale_audit_rows;
+DELIMITER $$
+CREATE EVENT yearly_delete_stale_audit_rows
+ON SCHEDULE
+	-- AT '2021-10-01'
+    EVERY 1 YEAR STARTS '2021-01-01' ENDS '2029-01-01'
+DO BEGIN
+	DELETE FROM payments_audit
+    WHERE action_date < NOW() - INTERVAL 1 YEAR;
+    -- or DATESUB(NOW(), INTERVAL 1 YEAR)
+END $$
+DELIMITER ;
+
